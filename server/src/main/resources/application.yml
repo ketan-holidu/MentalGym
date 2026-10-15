@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: mental-gym
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/mentalgym}
+    username: ${DATABASE_USER:mentalgym}
+    password: ${DATABASE_PASSWORD:mentalgym}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  ai:
+    mcp:
+      server:
+        protocol: STREAMABLE
+        type: SYNC
+        name: mental-gym
+        version: 1.0.0
+        instructions: >
+          Mental Gym holds every concept, document, test, attempt and grade for one learner.
+          Tools are split by role: the main session never calls generator, verifier or grader tools.
+        streamable-http:
+          mcp-endpoint: ${MCP_ENDPOINT:/mcp}
+        annotation-scanner:
+          enabled: true
+
+server:
+  port: ${SERVER_PORT:8080}
+
+mental-gym:
+  pass-threshold: ${PASS_THRESHOLD:0.8}
+  srs-ladder-days: ${SRS_LADDER_DAYS:3,7,14,30,60,120}
+  allowed-origins: ${ALLOWED_ORIGINS:http://localhost:8080,http://127.0.0.1:8080}
+  zone: ${TZ:Europe/Berlin}
+  mcp-endpoint: ${MCP_ENDPOINT:/mcp}
+  doc-token-soft-cap: 15000
+
+logging:
+  level:
+    root: INFO
+    com.mentalgym: INFO

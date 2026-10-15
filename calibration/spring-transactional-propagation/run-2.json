@@ -1,0 +1,89 @@
+{
+  "shallow": {
+    "1": {
+      "score": 0.0909,
+      "misconception": true,
+      "missed": [
+        "c1",
+        "c2",
+        "c3",
+        "c4",
+        "c5"
+      ],
+      "feedback": "Your answer lands squarely on the listed misconception: you concluded the order row commits and only the audit row is missing. That is not what happens. With the default PROPAGATION_REQUIRED, record() does not get its own physical transaction \u2014 it opens a second *logical* scope mapped onto the same physical transaction started by placeOrder(). When the IllegalStateException leaves record()'s scope, that inner interceptor sets the rollback-only marker on the shared physical transaction. Your try/catch is plain application code and cannot clear that marker, so when placeOrder() returns normally and its interceptor calls commit, the transaction manager rolls back instead and throws UnexpectedRollbackException to the caller; the order insert is lost too. Spring does this deliberately so a caller that asked for a commit is never misled into believing one happened. You did name REQUIRES_NEW as the fix, which is right, but your trade-off (\"a bit more overhead per call\") misses the concrete one: the inner transaction grabs a second connection while the outer one still holds its own, so the pool must exceed the number of concurrent threads or you get exhaustion/deadlock \u2014 and the inner work commits independently. NESTED (savepoint, JDBC resource transactions only) is the alternative. Reread the \"Transaction Propagation\" doc, especially \"Understanding PROPAGATION_REQUIRED\" and \"Understanding PROPAGATION_REQUIRES_NEW\"."
+    },
+    "3": {
+      "score": 0.0,
+      "misconception": true,
+      "missed": [
+        "c1",
+        "c2",
+        "c3",
+        "c4",
+        "c5"
+      ],
+      "feedback": "This answer reproduces three of the classic misconceptions at once. (1) You described NESTED and REQUIRES_NEW only as \"nests ... inside the outer one\" vs \"starts a fresh one for each row\" without the mechanics that matter: NESTED is a *single physical transaction* with savepoints on one connection, while REQUIRES_NEW opens an *independent physical transaction* with its own extra connection per row (the outer transaction's resources stay bound, so the pool must exceed concurrent threads by at least 1). (2) \"the rows that already succeeded are gone in both cases\" is wrong for REQUIRES_NEW \u2014 those rows were already committed independently and survive an outer failure; only NESTED loses them. (3) \"The timeout of 2 seconds applies ... in both designs\" is wrong: the @Transactional tables in the docs state that timeout, isolation and readOnly apply *only* to propagation REQUIRED or REQUIRES_NEW, so design B gets its 2-second budget and NESTED does not. (4) You missed that NESTED is mapped onto JDBC savepoints and therefore only works with JDBC resource transactions (DataSourceTransactionManager) \u2014 the opposite of \"works with every transaction manager\". (5) For all-or-nothing apart from skipped rows the correct pick is NESTED, because a partial rollback to a savepoint discards the bad row while the one physical transaction still commits or rolls back as a unit; REQUIRES_NEW destroys batch atomicity by committing each row separately. Reread \"Transaction Propagation\" (especially the PROPAGATION_REQUIRES_NEW and PROPAGATION_NESTED sections) and the @Transactional Settings table in \"Using @Transactional\"."
+    },
+    "4": {
+      "score": 0.25,
+      "misconception": true,
+      "missed": [
+        "c1",
+        "c2",
+        "c3",
+        "c4",
+        "c5"
+      ],
+      "feedback": "Your diagnosis is the main miss and it matches a listed misconception: the row does not survive because the write \"already happened\" or because the gateway call is outside the transaction \u2014 an open transaction can always roll back an uncommitted insert. The actual rule, stated verbatim in \"Using @Transactional\" under \"@Transactional Settings\", is that by default \"Any RuntimeException or Error triggers rollback, and any checked Exception does not\"; SettlementFailedException extends java.lang.Exception, so it is checked, and the interceptor commits. Your method-scoped fix works mechanically but you should name the exception type (rollbackFor = [SettlementFailedException::class]) or simply make it a RuntimeException. The global fix has a concrete name you did not give: @EnableTransactionManagement(rollbackOn = ALL_EXCEPTIONS), new in 6.2. And \"which then applies everywhere\" misses the nuance the doc spells out \u2014 transaction-specific rollback rules override the default but retain the chosen default for exceptions they do not mention, so an existing noRollbackFor keeps committing for that type while everything else in that method now rolls back. Your Kotlin point is on the right track but needs the link: Kotlin does not enforce checked exceptions at all, which is exactly why the docs advise Kotlin applications to switch to ALL_EXCEPTIONS. Reread the \"@Transactional Settings\" section of doc 0."
+    }
+  },
+  "medium": {
+    "1": {
+      "score": 0.7727,
+      "misconception": false,
+      "missed": [
+        "c3",
+        "c5"
+      ],
+      "feedback": "Strong on the mechanism and the observable outcome: you correctly identified the shared physical transaction, the rollback-only marker that the catch block cannot clear, the UnexpectedRollbackException, and REQUIRES_NEW as the fix. Two gaps. First, you never gave the rationale Spring documents for throwing UnexpectedRollbackException rather than failing silently: the outer caller asked for a commit and must never be misled into believing a commit happened when an inner scope (which it is unaware of) vetoed it and a rollback was performed. Second, your trade-off stopped at \"a second database connection\" \u2014 the doc's concrete warning is that the outer transaction's resources stay bound while the inner one acquires its own connection, so the pool can be exhausted and threads can deadlock unless the pool exceeds the number of concurrent threads by at least 1 (and the inner work commits independently). Mentioning NESTED/savepoints as the alternative, with its JDBC-resource-only limitation, would also have strengthened the answer. Reread \"Transaction Propagation\" (the PROPAGATION_REQUIRED and PROPAGATION_REQUIRES_NEW sections), which also supplies the physical-versus-logical transaction scope vocabulary worth using explicitly."
+    },
+    "3": {
+      "score": 0.7727,
+      "misconception": false,
+      "missed": [
+        "c3",
+        "c4"
+      ],
+      "feedback": "Strong on the physical-transaction/connection contrast and on the rollback consequences for the 499 good rows, and your pick of NESTED is well justified. Two points were imprecise. On the timeout, you described a behavioural intuition (\"a nested one is bounded by the transaction that is already running\") but missed the actual rule from \"Using @Transactional\" (@Transactional Settings table) and \"<tx:advice/> Settings\": timeout \u2014 like isolation and readOnly \u2014 applies only to propagation values REQUIRED or REQUIRES_NEW, so timeout = 2 is simply not honoured for NESTED (there is no new physical transaction to apply it to), while it does take effect for REQUIRES_NEW, which may declare its own isolation, timeout and read-only settings. On the resource requirement, \"a resource that supports savepoints\" is only half the point: reread \"Understanding PROPAGATION_NESTED\" \u2014 NESTED is typically mapped onto JDBC savepoints and therefore works only with JDBC resource transactions, e.g. DataSourceTransactionManager. Mentioning that the REQUIRES_NEW design additionally needs a pool exceeding the number of concurrent threads by at least one would have rounded out part (4)."
+    },
+    "4": {
+      "score": 0.7,
+      "misconception": false,
+      "missed": [
+        "c3",
+        "c4"
+      ],
+      "feedback": "Your diagnosis of the checked-exception default and the method-scoped fix are exactly right, and the Kotlin angle is well put. Two gaps. First, the global fix is described only in prose \u2014 the criterion wants the actual mechanism: @EnableTransactionManagement(rollbackOn = ALL_EXCEPTIONS) (with AnnotationTransactionAttributeSource.addDefaultRollbackRule(...) for further customization). Second, you skipped the part of the question about existing methods entirely: transaction-specific rollback rules override the default behaviour but retain the chosen default for exceptions they do not mention, so a method with @Transactional(noRollbackFor = [SomeException::class]) still commits for SomeException while every other exception there now follows ALL_EXCEPTIONS \u2014 and this holds for JTA's jakarta.transaction.Transactional too. Reread the \"@Transactional Settings\" section of the \"Using @Transactional\" doc, specifically the paragraphs following Table 2 on changing the default rollback behavior."
+    }
+  },
+  "deep": {
+    "1": {
+      "score": 1.0,
+      "misconception": false,
+      "missed": [],
+      "feedback": "Full marks. You nailed the physical-vs-logical transaction distinction, correctly identified that the rollback-only marker lives on the shared physical transaction and survives the application-level catch, and gave the exact rationale from the Transaction Propagation doc (the caller must never be misled into thinking a commit happened). Both fixes were named with accurate trade-offs: the extra connection per thread and pool-sizing/deadlock risk for REQUIRES_NEW, and the JDBC-savepoint-only restriction for NESTED. Your extra points about the inner transaction not seeing the outer's uncommitted writes and the loss of atomicity are correct and go beyond what was asked. Nothing to reread."
+    },
+    "3": {
+      "score": 1.0,
+      "misconception": false,
+      "missed": [],
+      "feedback": "Complete and accurate on all four comparison axes: single physical transaction with savepoints and one connection versus 501 physical transactions with two connections held per thread, the fate of the 499 good rows in each case, the timeout being honoured only for the independent REQUIRES_NEW transaction and silently ignored for the participating/nested scope, and NESTED's dependence on JDBC savepoints via DataSourceTransactionManager. The choice of NESTED is correctly justified by partial rollback inside one physical transaction, and the trade-off you name (pushing the per-row cut-off to a JDBC statement timeout) is exactly right. Nothing missing \u2014 if you want to sharpen the wording, the Transaction Propagation doc states the timeout rule as an attribute-level restriction (\"Applies only to propagation values of REQUIRED or REQUIRES_NEW\"), which is a crisper way to say what you argued from the participating-scope behaviour."
+    },
+    "4": {
+      "score": 1.0,
+      "misconception": false,
+      "missed": [],
+      "feedback": "Complete and precise. You nailed the default rollback rule (unchecked rolls back, checked commits) and the key distinction that the exception propagating to the caller is independent of the rollback decision; both fixes are correct, including the 6.2 rollbackOn = ALL_EXCEPTIONS global switch and the addDefaultRollbackRule hook; and your account of per-method rules overriding the default only for the exceptions they name, with the new default still governing the rest, matches the documentation exactly. The Kotlin angle is well argued too. Nothing missing."
+    }
+  }
+}

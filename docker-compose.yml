@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:17.2
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mentalgym
+      POSTGRES_USER: mentalgym
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mentalgym}
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - mental-gym-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mentalgym -d mentalgym"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: ./server
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/mentalgym
+      DATABASE_USER: mentalgym
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-mentalgym}
+      PASS_THRESHOLD: ${PASS_THRESHOLD:-0.8}
+      SRS_LADDER_DAYS: ${SRS_LADDER_DAYS:-3,7,14,30,60,120}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      SERVER_PORT: 8080
+      TZ: ${TZ:-Europe/Berlin}
+    ports:
+      - "127.0.0.1:${SERVER_PORT:-8080}:8080"
+
+volumes:
+  mental-gym-db:

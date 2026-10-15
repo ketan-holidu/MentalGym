@@ -1,0 +1,7 @@
+target/
+.env
+backups/*.sql
+.DS_Store
+
+# fetched document snapshots - kept local, see calibration/*/sources.md
+calibration/**/*.txt

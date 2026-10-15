@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mental-gym": {
+      "type": "http",
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
